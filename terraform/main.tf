@@ -63,7 +63,7 @@ resource "aws_security_group" "kredar" {
 # Shared deploy key pair (the private half lives only in GitHub secrets).
 resource "aws_key_pair" "kredar" {
   key_name   = "kredar-deploy-key"
-  public_key = file(var.public_key_path)
+  public_key = file(pathexpand(var.public_key_path))
 }
 
 # One EC2 host per environment. Docker is installed on first boot via cloud-init.
