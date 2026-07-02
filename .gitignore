@@ -1,0 +1,11 @@
+# Terraform state (contains secrets - never commit)
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Tfvars contain real values - keep out of git
+terraform.tfvars
+
+# macOS
+.DS_Store
