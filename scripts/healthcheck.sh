@@ -12,9 +12,10 @@ RETRIES="${HEALTHCHECK_RETRIES:-20}"
 SLEEP="${HEALTHCHECK_SLEEP:-3}"
 
 # service endpoints inside the network (name:port)
-# (kredar-frontend + ajovault-api are added here when those images ship.)
+# (ajovault-api is added here when that image ships.)
 SERVICES=(
   "kredar-api:8080"
+  "kredar-frontend:3000"
 )
 
 check_one() {
