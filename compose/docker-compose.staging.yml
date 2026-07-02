@@ -1,0 +1,22 @@
+# Staging overrides — expose the Traefik dashboard (behind basic auth), smaller footprint.
+name: kredar
+
+services:
+  traefik:
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${ENVIRONMENT}.${DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+
+  kredar-api:
+    deploy:
+      resources:
+        limits:
+          memory: 512M

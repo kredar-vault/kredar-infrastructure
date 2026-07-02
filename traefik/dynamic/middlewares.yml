@@ -1,0 +1,34 @@
+# Dynamic Traefik configuration (hot-reloaded).
+http:
+  middlewares:
+    # Sensible security headers applied to every public router.
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+
+    # Per-client-IP rate limiting (defence against floods / brute force).
+    rate-limit:
+      rateLimit:
+        average: 100        # sustained req/s per source IP
+        burst: 50
+        period: 1s
+
+    # Bundle applied to public app routers.
+    api-chain:
+      chain:
+        middlewares:
+          - security-headers
+          - rate-limit
+
+# The staging dashboard's basic-auth middleware is defined via a Docker label
+# on the traefik service (compose/docker-compose.staging.yml), because the file
+# provider does not expand environment variables but Docker labels do.

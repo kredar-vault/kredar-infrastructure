@@ -1,0 +1,107 @@
+# Base composition for the Kredar platform.
+#
+# Environment-agnostic: values that differ between staging and prod come from the
+# runtime env file (env/<env>.runtime.env); image tags come from versions/<env>.env.
+# Deploy with:
+#
+#   docker compose -f compose/docker-compose.yml \
+#                  -f compose/docker-compose.<env>.yml \
+#                  --env-file env/<env>.runtime.env up -d
+#
+# Nothing secret or environment-specific is hard-coded here.
+# (The frontend + ajovault services are added when those repos ship images.)
+
+name: kredar
+
+networks:
+  edge:        # public-facing; only Traefik is attached + published
+    name: kredar-edge
+  internal:    # private app/db network, never published to the host
+    name: kredar-internal
+
+volumes:
+  traefik-acme:      # Let's Encrypt certificate store
+  postgres-data:     # database persistence
+
+services:
+  # ---- Reverse proxy / TLS termination --------------------------------
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3.6}
+    container_name: kredar-traefik
+    restart: unless-stopped
+    networks: [edge, internal]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik-acme:/acme
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Traefik can't interpolate ${VARS} in its static YAML, so the ACME contact
+      # email is supplied via this env var instead.
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL}
+    labels:
+      - "traefik.enable=true"
+
+  # ---- Database -------------------------------------------------------
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    container_name: kredar-postgres
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---- Application: Kredar API (image built by kredar-backend) ---------
+  kredar-api:
+    image: ${KREDAR_API_IMAGE:?set KREDAR_API_IMAGE in versions/<env>.env}
+    container_name: kredar-api
+    restart: unless-stopped
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${KREDAR_ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      # App base URL (this API).
+      AppSettings__BaseUrl: "https://${KREDAR_API_HOST}"
+      # CORS — the frontend origin(s) allowed to call the API.
+      Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-}
+      # JWT (signing secret is a GitHub secret; issuer/audience are non-secret).
+      JwtSettings__Secret: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY as a GitHub secret}
+      JwtSettings__Issuer: ${JWT_ISSUER:-kredar-api}
+      JwtSettings__Audience: ${JWT_AUDIENCE:-kredar-clients}
+      JwtSettings__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-60}
+      # Nomba integration (base URL non-secret; credentials are secrets).
+      NombaSettings__BaseUrl: ${NOMBA_BASE_URL:-https://api.nomba.com}
+      NombaSettings__ClientId: ${NOMBA_CLIENT_ID:-}
+      NombaSettings__ClientSecret: ${NOMBA_CLIENT_SECRET:-}
+      NombaSettings__AccountId: ${NOMBA_ACCOUNT_ID:-}
+      # Transactional email via Resend (same as Xental). API key is a secret.
+      Resend__ApiKey: ${RESEND_API_KEY:-}
+      Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
+      Resend__FromName: ${RESEND_FROM_NAME:-Kredar}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.kredar-api.rule=Host(`${KREDAR_API_HOST}`)"
+      - "traefik.http.routers.kredar-api.entrypoints=websecure"
+      - "traefik.http.routers.kredar-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kredar-api.middlewares=api-chain@file"
+      - "traefik.http.services.kredar-api.loadbalancer.server.port=8080"
+      - "traefik.http.services.kredar-api.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.kredar-api.loadbalancer.healthcheck.interval=15s"

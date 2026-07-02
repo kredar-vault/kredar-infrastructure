@@ -11,17 +11,23 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Security Group
-resource "aws_security_group" "kredar_sg" {
-  name        = "kredar-sg"
-  description = "Allow HTTP, HTTPS, SSH and API traffic"
+locals {
+  environments = toset(["staging", "production"])
+}
+
+# Security group — one per environment (HTTP/HTTPS/SSH; app port 8080 stays
+# private to the compose network and is intentionally NOT opened publicly).
+resource "aws_security_group" "kredar" {
+  for_each    = local.environments
+  name        = "kredar-${each.key}-sg"
+  description = "Kredar ${each.key}: allow HTTP, HTTPS, SSH"
 
   ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.ssh_ingress_cidr]
   }
 
   ingress {
@@ -40,14 +46,6 @@ resource "aws_security_group" "kredar_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    description = "Kredar API"
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -56,43 +54,64 @@ resource "aws_security_group" "kredar_sg" {
   }
 
   tags = {
-    Name = "kredar-sg"
+    Name    = "kredar-${each.key}-sg"
+    Project = "kredar"
+    Env     = each.key
   }
 }
 
-# Key Pair
-resource "aws_key_pair" "kredar_key" {
-  key_name   = "kredar-key"
+# Shared deploy key pair (the private half lives only in GitHub secrets).
+resource "aws_key_pair" "kredar" {
+  key_name   = "kredar-deploy-key"
   public_key = file(var.public_key_path)
 }
 
-# EC2 Instance
-resource "aws_instance" "kredar_server" {
+# One EC2 host per environment. Docker is installed on first boot via cloud-init.
+resource "aws_instance" "kredar" {
+  for_each               = local.environments
   ami                    = var.ami_id
   instance_type          = var.instance_type
-  key_name               = aws_key_pair.kredar_key.key_name
-  vpc_security_group_ids = [aws_security_group.kredar_sg.id]
+  key_name               = aws_key_pair.kredar.key_name
+  vpc_security_group_ids = [aws_security_group.kredar[each.key].id]
 
   user_data = <<-EOF
     #!/bin/bash
+    set -e
     apt-get update -y
-    apt-get install -y docker.io docker-compose-v2 git
-    systemctl start docker
-    systemctl enable docker
+    apt-get install -y ca-certificates curl git rsync
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -y
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    systemctl enable --now docker
     usermod -aG docker ubuntu
+    mkdir -p /opt/kredar-infrastructure
+    chown -R ubuntu:ubuntu /opt/kredar-infrastructure
   EOF
 
+  root_block_device {
+    volume_size = var.root_volume_gb
+    volume_type = "gp3"
+  }
+
   tags = {
-    Name = "kredar-server"
+    Name    = "kredar-${each.key}"
+    Project = "kredar"
+    Env     = each.key
   }
 }
 
-# Elastic IP (static public IP)
-resource "aws_eip" "kredar_eip" {
-  instance = aws_instance.kredar_server.id
+# Static Elastic IP per host (use these for DNS A records).
+resource "aws_eip" "kredar" {
+  for_each = local.environments
+  instance = aws_instance.kredar[each.key].id
   domain   = "vpc"
 
   tags = {
-    Name = "kredar-eip"
+    Name    = "kredar-${each.key}-eip"
+    Project = "kredar"
+    Env     = each.key
   }
 }
