@@ -105,3 +105,24 @@ services:
       - "traefik.http.services.kredar-api.loadbalancer.server.port=8080"
       - "traefik.http.services.kredar-api.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.kredar-api.loadbalancer.healthcheck.interval=15s"
+
+  # ---- Frontend (Next.js) — served at the root/app domain --------------
+  kredar-frontend:
+    image: ${KREDAR_FRONTEND_IMAGE:?set KREDAR_FRONTEND_IMAGE in versions/<env>.env}
+    container_name: kredar-frontend
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      NODE_ENV: production
+      # NEXT_PUBLIC_* is baked at build time; these serve SSR/server components.
+      NEXT_PUBLIC_API_URL: "https://${KREDAR_API_HOST}"
+      API_URL: "https://${KREDAR_API_HOST}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.kredar-frontend.rule=Host(`${KREDAR_FRONTEND_HOST}`)"
+      - "traefik.http.routers.kredar-frontend.entrypoints=websecure"
+      - "traefik.http.routers.kredar-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kredar-frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.interval=15s"
