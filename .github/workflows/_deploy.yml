@@ -1,0 +1,104 @@
+# Reusable deploy workflow: pins the new image tag, renders the runtime env
+# from GitHub Environment secrets, then ships it to the env's EC2 host over SSH
+# and runs the health-checked, auto-rollback deploy.
+name: _deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: staging | production
+        required: true
+        type: string
+      service:
+        description: app being released (kredar-backend); empty = redeploy current pins
+        required: false
+        default: ""
+        type: string
+      sha:
+        description: git SHA of the app image to pin
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write   # to commit the version pin
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Resolves GitHub Environment secrets/vars and gates prod on required reviewers.
+    environment: ${{ inputs.environment }}
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+    steps:
+      - name: Checkout env branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.environment == 'production' && 'main' || 'staging' }}
+
+      - name: Pin new image tag
+        if: ${{ inputs.service != '' && inputs.sha != '' }}
+        run: |
+          set -euo pipefail
+          case "${{ inputs.service }}" in
+            kredar-backend)  VAR=KREDAR_API_IMAGE;      IMG=ghcr.io/kredar-vault/kredar-backend ;;
+            kredar-frontend) VAR=KREDAR_FRONTEND_IMAGE; IMG=ghcr.io/kredar-vault/kredar-frontend ;;
+            ajovault)        VAR=AJOVAULT_API_IMAGE;    IMG=ghcr.io/kredar-vault/ajovault ;;
+            *) echo "unknown service: ${{ inputs.service }}" >&2; exit 1 ;;
+          esac
+          f="versions/${ENVIRONMENT}.env"
+          sed -i -E "s#^${VAR}=.*#${VAR}=${IMG}:sha-${{ inputs.sha }}#" "$f"
+          git config user.name  "kredar-ci"
+          git config user.email "ci@kredar-vault.noreply"
+          git add "$f"
+          git commit -m "deploy(${ENVIRONMENT}): ${{ inputs.service }} -> sha-${{ inputs.sha }}" || echo "no change to pin"
+          git push
+
+      - name: Render runtime env from GitHub secrets
+        env:
+          POSTGRES_PASSWORD:      ${{ secrets.POSTGRES_PASSWORD }}
+          GHCR_USER:              ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN:             ${{ secrets.GHCR_TOKEN }}
+          TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
+          # Kredar backend — auth, email (Resend), Nomba.
+          JWT_SIGNING_KEY:        ${{ secrets.JWT_SIGNING_KEY }}
+          RESEND_API_KEY:         ${{ secrets.RESEND_API_KEY }}
+          NOMBA_CLIENT_ID:        ${{ secrets.NOMBA_CLIENT_ID }}
+          NOMBA_CLIENT_SECRET:    ${{ secrets.NOMBA_CLIENT_SECRET }}
+          NOMBA_ACCOUNT_ID:       ${{ secrets.NOMBA_ACCOUNT_ID }}
+        run: |
+          chmod +x scripts/render-env.sh
+          scripts/render-env.sh "${ENVIRONMENT}"
+
+      - name: Ship to host and deploy over SSH
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" || { echo "vars.SSH_HOST not set for ${ENVIRONMENT}" >&2; exit 1; }
+          : "${SSH_USER:=ubuntu}"
+
+          KEY="$RUNNER_TEMP/deploy_key"
+          install -m 600 /dev/null "$KEY"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
+          SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts")
+
+          REMOTE="$SSH_USER@$SSH_HOST"
+          DEST=/opt/kredar-infrastructure
+
+          # Ensure destination exists and is writable by the deploy user.
+          "${SSH[@]}" "$REMOTE" "sudo mkdir -p $DEST/env && sudo chown -R \$(id -u):\$(id -g) $DEST"
+
+          # Ship infra files (with --delete to prune removed files) ...
+          rsync -az --delete-after -e "${SSH[*]}" \
+            compose traefik scripts versions "$REMOTE:$DEST/"
+          # ... and the rendered runtime env (separately; never deleted/pruned).
+          rsync -az -e "${SSH[*]}" \
+            "env/${ENVIRONMENT}.runtime.env" "$REMOTE:$DEST/env/"
+
+          # Run the deploy (health-check + auto-rollback live in deploy.sh).
+          "${SSH[@]}" "$REMOTE" \
+            "cd $DEST && chmod +x scripts/*.sh && REPO_DIR=$DEST scripts/deploy.sh ${ENVIRONMENT}"

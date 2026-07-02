@@ -1,0 +1,27 @@
+# Manual rollback: revert the version pin for an environment to a previous SHA
+# and redeploy. Run from the Actions tab.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: staging | production
+        required: true
+        default: staging
+      service:
+        description: service to roll back (kredar-backend)
+        required: true
+        default: kredar-backend
+      sha:
+        description: the git SHA to roll back to (image tag sha-<value>)
+        required: true
+
+jobs:
+  rollback:
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      service: ${{ github.event.inputs.service }}
+      sha: ${{ github.event.inputs.sha }}
+    secrets: inherit

@@ -1,14 +1,9 @@
-output "instance_public_ip" {
-  description = "EC2 instance public IP (may change on restart)"
-  value       = aws_instance.kredar_server.public_ip
+output "host_public_ips" {
+  description = "Static Elastic IPs per environment — use these for DNS A records + GitHub SSH_HOST."
+  value       = { for env, eip in aws_eip.kredar : env => eip.public_ip }
 }
 
-output "elastic_ip" {
-  description = "Static Elastic IP — use this for DNS and frontend config"
-  value       = aws_eip.kredar_eip.public_ip
-}
-
-output "ssh_command" {
-  description = "SSH into the server"
-  value       = "ssh ubuntu@${aws_eip.kredar_eip.public_ip}"
+output "ssh_commands" {
+  description = "SSH into each host with the deploy key."
+  value       = { for env, eip in aws_eip.kredar : env => "ssh -i ~/.ssh/kredar_deploy ubuntu@${eip.public_ip}" }
 }
