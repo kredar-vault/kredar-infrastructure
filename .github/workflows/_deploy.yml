@@ -22,7 +22,7 @@ on:
         type: string
 
 permissions:
-  contents: write   # to commit the version pin
+  contents: read   # org disallows write tokens; the pin is applied in-place (rsync'd to host), not committed
 
 jobs:
   deploy:
@@ -37,7 +37,7 @@ jobs:
         with:
           ref: ${{ inputs.environment == 'production' && 'main' || 'staging' }}
 
-      - name: Pin new image tag
+      - name: Pin new image tag (in-place; shipped to host via rsync, not committed)
         if: ${{ inputs.service != '' && inputs.sha != '' }}
         run: |
           set -euo pipefail
@@ -48,12 +48,10 @@ jobs:
             *) echo "unknown service: ${{ inputs.service }}" >&2; exit 1 ;;
           esac
           f="versions/${ENVIRONMENT}.env"
+          # Pin this deploy to the immutable sha tag. The runner's checkout is
+          # rsynced to the host below, so the pin takes effect without a git push.
           sed -i -E "s#^${VAR}=.*#${VAR}=${IMG}:sha-${{ inputs.sha }}#" "$f"
-          git config user.name  "kredar-ci"
-          git config user.email "ci@kredar-vault.noreply"
-          git add "$f"
-          git commit -m "deploy(${ENVIRONMENT}): ${{ inputs.service }} -> sha-${{ inputs.sha }}" || echo "no change to pin"
-          git push
+          echo "pinned $VAR -> ${IMG}:sha-${{ inputs.sha }}"
 
       - name: Render runtime env from GitHub secrets
         env:
