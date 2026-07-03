@@ -89,6 +89,11 @@ resource "aws_instance" "kredar" {
     usermod -aG docker ubuntu
     mkdir -p /opt/kredar-infrastructure
     chown -R ubuntu:ubuntu /opt/kredar-infrastructure
+    # Avoid jumbo-frame (MTU 9001) PMTU blackholes to external TLS (Let's Encrypt).
+    IFACE=$(ip route | awk '/default/{print $5; exit}')
+    ip link set dev "$IFACE" mtu 1500 || true
+    printf '[Unit]\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nExecStart=/usr/sbin/ip link set dev %s mtu 1500\nRemainAfterExit=yes\n[Install]\nWantedBy=multi-user.target\n' "$IFACE" > /etc/systemd/system/set-mtu.service
+    systemctl enable set-mtu.service || true
   EOF
 
   root_block_device {
