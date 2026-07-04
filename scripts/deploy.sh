@@ -37,7 +37,7 @@ deploy_with() {
   # --project-directory pins relative bind-mount paths (./traefik) to the repo
   # root rather than the compose/ subdir where the files live.
   docker compose --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" --env-file "$ef" pull
-  docker compose --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" --env-file "$ef" up -d --remove-orphans
+  docker compose --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" --env-file "$ef" up -d --remove-orphans --force-recreate
 }
 
 ghcr_login_from() {
