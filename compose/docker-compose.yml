@@ -91,6 +91,11 @@ services:
       NombaSettings__ClientId: ${NOMBA_CLIENT_ID:-}
       NombaSettings__ClientSecret: ${NOMBA_CLIENT_SECRET:-}
       NombaSettings__AccountId: ${NOMBA_ACCOUNT_ID:-}
+      NombaSettings__SubAccountId: ${NOMBA_SUB_ACCOUNT_ID:-}
+      NombaSettings__WebhookSecret: ${NOMBA_WEBHOOK_SECRET:-}
+      NombaSettings__WebhookSignatureHeader: ${NOMBA_WEBHOOK_SIGNATURE_HEADER:-nomba-signature}
+      NombaSettings__TimestampHeader: ${NOMBA_TIMESTAMP_HEADER:-nomba-timestamp}
+      NombaSettings__TokenRefreshSeconds: ${NOMBA_TOKEN_REFRESH_SECONDS:-3300}
       # Transactional email via Resend (same as Xental). API key is a secret.
       Resend__ApiKey: ${RESEND_API_KEY:-}
       Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
