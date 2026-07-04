@@ -1,8 +1,11 @@
-# Staging deploy. Fired automatically by an app repo after it pushes a new
-# image (repository_dispatch: deploy-staging), or manually.
+# Staging deploy. Fired automatically on push to staging branch, by an app
+# repo after it pushes a new image (repository_dispatch: deploy-staging), or manually.
 name: Deploy staging
 
 on:
+  push:
+    branches:
+      - staging
   repository_dispatch:
     types: [deploy-staging]
   workflow_dispatch:
