@@ -101,6 +101,8 @@ services:
       Resend__ApiKey: ${RESEND_API_KEY:-}
       Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
       Resend__FromName: ${RESEND_FROM_NAME:-Kredar}
+      # Admin bootstrap secret — set as a GitHub secret; leave unset to disable the endpoint.
+      AdminSettings__BootstrapSecret: ${ADMIN_BOOTSTRAP_SECRET:-}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=kredar-internal"
