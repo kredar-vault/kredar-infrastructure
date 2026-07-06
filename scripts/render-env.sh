@@ -46,6 +46,7 @@ OPTIONAL_SECRETS=(
   NOMBA_ACCOUNT_ID
   NOMBA_SUB_ACCOUNT_ID
   NOMBA_WEBHOOK_SECRET
+  ADMIN_BOOTSTRAP_SECRET
 )
 
 # Keep only KEY=VALUE lines (drop comments/blanks) from the non-secret layers.
