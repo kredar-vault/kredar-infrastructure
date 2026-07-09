@@ -22,6 +22,7 @@ networks:
 volumes:
   traefik-acme:      # Let's Encrypt certificate store
   postgres-data:     # database persistence
+  ajovault-postgres-data:  # ajovault database persistence (separate instance)
 
 services:
   # ---- Reverse proxy / TLS termination --------------------------------
@@ -77,8 +78,9 @@ services:
       ASPNETCORE_ENVIRONMENT: ${KREDAR_ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_HTTP_PORTS: "8080"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-      # App base URL (this API).
+      # App base URL (this API) and the frontend URL (for email links).
       AppSettings__BaseUrl: "https://${KREDAR_API_HOST}"
+      AppSettings__FrontendUrl: "https://${KREDAR_FRONTEND_HOST}"
       # CORS — the frontend origin(s) allowed to call the API.
       Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-}
       # JWT (signing secret is a GitHub secret; issuer/audience are non-secret).
@@ -100,6 +102,8 @@ services:
       Resend__ApiKey: ${RESEND_API_KEY:-}
       Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
       Resend__FromName: ${RESEND_FROM_NAME:-Kredar}
+      # Admin bootstrap secret — set as a GitHub secret; leave unset to disable the endpoint.
+      AdminSettings__BootstrapSecret: ${ADMIN_BOOTSTRAP_SECRET:-}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=kredar-internal"
@@ -131,3 +135,74 @@ services:
       - "traefik.http.services.kredar-frontend.loadbalancer.server.port=3000"
       - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.interval=15s"
+
+  # ---- AjoVault database (dedicated instance) -------------------------
+  ajovault-postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    container_name: ajovault-postgres
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${AJOVAULT_POSTGRES_USER:-ajovault_app}
+      POSTGRES_PASSWORD: ${AJOVAULT_POSTGRES_PASSWORD:?set AJOVAULT_POSTGRES_PASSWORD as a GitHub secret}
+      POSTGRES_DB: ${AJOVAULT_POSTGRES_DB:-ajovault}
+    volumes:
+      - ajovault-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AJOVAULT_POSTGRES_USER:-ajovault_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---- AjoVault API (image built by ajovault-backend) -----------------
+  ajovault-api:
+    image: ${AJOVAULT_API_IMAGE:?set AJOVAULT_API_IMAGE in versions/<env>.env}
+    container_name: ajovault-api
+    restart: unless-stopped
+    networks: [internal]
+    depends_on:
+      ajovault-postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${AJOVAULT_ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__DefaultConnection: "Host=ajovault-postgres;Port=5432;Database=${AJOVAULT_POSTGRES_DB:-ajovault};Username=${AJOVAULT_POSTGRES_USER:-ajovault_app};Password=${AJOVAULT_POSTGRES_PASSWORD}"
+      AppSettings__BaseUrl: "https://${AJOVAULT_API_HOST}"
+      Cors__AllowedOrigins: "https://${AJOVAULT_FRONTEND_HOST}"
+      JwtSettings__Secret: ${AJOVAULT_JWT_SIGNING_KEY:?set AJOVAULT_JWT_SIGNING_KEY as a GitHub secret}
+      JwtSettings__Issuer: ${AJOVAULT_JWT_ISSUER:-ajovault-api}
+      JwtSettings__Audience: ${AJOVAULT_JWT_AUDIENCE:-ajovault-clients}
+      JwtSettings__ExpiryMinutes: ${AJOVAULT_JWT_EXPIRY_MINUTES:-60}
+      KredarSettings__BaseUrl: ${AJOVAULT_KREDAR_BASE_URL:-http://kredar-api:8080}
+      KredarSettings__ApiKey: ${AJOVAULT_KREDAR_API_KEY:-}
+      KredarSettings__WebhookSecret: ${AJOVAULT_KREDAR_WEBHOOK_SECRET:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.ajovault-api.rule=Host(`${AJOVAULT_API_HOST}`)"
+      - "traefik.http.routers.ajovault-api.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ajovault-api.middlewares=api-chain@file"
+      - "traefik.http.services.ajovault-api.loadbalancer.server.port=8080"
+      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.interval=15s"
+
+  # ---- AjoVault frontend (Next.js) ------------------------------------
+  ajovault-frontend:
+    image: ${AJOVAULT_FRONTEND_IMAGE:?set AJOVAULT_FRONTEND_IMAGE in versions/<env>.env}
+    container_name: ajovault-frontend
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: "https://${AJOVAULT_API_HOST}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.ajovault-frontend.rule=Host(`${AJOVAULT_FRONTEND_HOST}`)"
+      - "traefik.http.routers.ajovault-frontend.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.interval=15s"
