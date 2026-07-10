@@ -115,6 +115,61 @@ services:
       - "traefik.http.services.kredar-api.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.kredar-api.loadbalancer.healthcheck.interval=15s"
 
+  # ---- AjoVault API (ajovault-backend) ------------------------------------
+  ajovault-api:
+    image: ${AJOVAULT_API_IMAGE:?set AJOVAULT_API_IMAGE in versions/<env>.env}
+    container_name: ajovault-api
+    restart: unless-stopped
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${KREDAR_ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${AJOVAULT_POSTGRES_DB:-ajovault};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      AppSettings__BaseUrl: "https://${AJOVAULT_API_HOST}"
+      Cors__AllowedOrigins: ${AJOVAULT_CORS_ALLOWED_ORIGINS:-}
+      JwtSettings__Secret: ${AJOVAULT_JWT_SIGNING_KEY:?set AJOVAULT_JWT_SIGNING_KEY as a GitHub secret}
+      JwtSettings__Issuer: ajovault-api
+      JwtSettings__Audience: ajovault-clients
+      JwtSettings__ExpiryMinutes: 1440
+      EmailSettings__ApiKey: ${RESEND_API_KEY:-}
+      EmailSettings__FromEmail: ${RESEND_FROM_EMAIL:-noreply@ajovault.com}
+      EmailSettings__FromName: AjoVault
+      KredarSettings__BaseUrl: ${AJOVAULT_KREDAR_BASE_URL:-https://api.kredar.xyz}
+      KredarSettings__ApiKey: ${AJOVAULT_KREDAR_API_KEY:-}
+      KredarSettings__WebhookSecret: ${AJOVAULT_KREDAR_WEBHOOK_SECRET:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.ajovault-api.rule=Host(`${AJOVAULT_API_HOST}`)"
+      - "traefik.http.routers.ajovault-api.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ajovault-api.middlewares=api-chain@file"
+      - "traefik.http.services.ajovault-api.loadbalancer.server.port=8080"
+      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.interval=15s"
+
+  # ---- AjoVault Frontend (Next.js) ----------------------------------------
+  ajovault-frontend:
+    image: ${AJOVAULT_FRONTEND_IMAGE:?set AJOVAULT_FRONTEND_IMAGE in versions/<env>.env}
+    container_name: ajovault-frontend
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      NODE_ENV: production
+      API_BASE_URL: "https://${AJOVAULT_API_HOST}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kredar-internal"
+      - "traefik.http.routers.ajovault-frontend.rule=Host(`${AJOVAULT_FRONTEND_HOST}`)"
+      - "traefik.http.routers.ajovault-frontend.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.interval=15s"
+
   # ---- Frontend (Next.js) — served at the root/app domain --------------
   kredar-frontend:
     image: ${KREDAR_FRONTEND_IMAGE:?set KREDAR_FRONTEND_IMAGE in versions/<env>.env}
