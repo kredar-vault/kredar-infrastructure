@@ -42,9 +42,10 @@ jobs:
         run: |
           set -euo pipefail
           case "${{ inputs.service }}" in
-            kredar-backend)  VAR=KREDAR_API_IMAGE;      IMG=ghcr.io/kredar-vault/kredar-backend ;;
-            kredar-frontend) VAR=KREDAR_FRONTEND_IMAGE; IMG=ghcr.io/kredar-vault/kredar-frontend ;;
-            ajovault)        VAR=AJOVAULT_API_IMAGE;    IMG=ghcr.io/kredar-vault/ajovault ;;
+            kredar-backend)    VAR=KREDAR_API_IMAGE;        IMG=ghcr.io/kredar-vault/kredar-backend ;;
+            kredar-frontend)   VAR=KREDAR_FRONTEND_IMAGE;   IMG=ghcr.io/kredar-vault/kredar-frontend ;;
+            ajovault-backend)  VAR=AJOVAULT_API_IMAGE;      IMG=ghcr.io/kredar-vault/ajovault-backend ;;
+            ajovault)          VAR=AJOVAULT_FRONTEND_IMAGE; IMG=ghcr.io/kredar-vault/ajovault ;;
             *) echo "unknown service: ${{ inputs.service }}" >&2; exit 1 ;;
           esac
           f="versions/${ENVIRONMENT}.env"
@@ -67,6 +68,12 @@ jobs:
           NOMBA_ACCOUNT_ID:       ${{ secrets.NOMBA_ACCOUNT_ID }}
           NOMBA_SUB_ACCOUNT_ID:   ${{ secrets.NOMBA_SUB_ACCOUNT_ID }}
           NOMBA_WEBHOOK_SECRET:   ${{ secrets.NOMBA_WEBHOOK_SECRET }}
+          ADMIN_BOOTSTRAP_SECRET: ${{ secrets.ADMIN_BOOTSTRAP_SECRET }}
+          # AjoVault backend secrets.
+          AJOVAULT_POSTGRES_PASSWORD:     ${{ secrets.AJOVAULT_POSTGRES_PASSWORD }}
+          AJOVAULT_JWT_SIGNING_KEY:       ${{ secrets.AJOVAULT_JWT_SIGNING_KEY }}
+          AJOVAULT_KREDAR_API_KEY:        ${{ secrets.AJOVAULT_KREDAR_API_KEY }}
+          AJOVAULT_KREDAR_WEBHOOK_SECRET: ${{ secrets.AJOVAULT_KREDAR_WEBHOOK_SECRET }}
         run: |
           chmod +x scripts/render-env.sh
           scripts/render-env.sh "${ENVIRONMENT}"
