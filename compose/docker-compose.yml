@@ -98,6 +98,7 @@ services:
       NombaSettings__WebhookSignatureHeader: ${NOMBA_WEBHOOK_SIGNATURE_HEADER:-nomba-signature}
       NombaSettings__TimestampHeader: ${NOMBA_TIMESTAMP_HEADER:-nomba-timestamp}
       NombaSettings__TokenRefreshSeconds: ${NOMBA_TOKEN_REFRESH_SECONDS:-3300}
+      NombaSettings__SimulateTransfers: "false"
       # Transactional email via Resend (same as Xental). API key is a secret.
       Resend__ApiKey: ${RESEND_API_KEY:-}
       Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
