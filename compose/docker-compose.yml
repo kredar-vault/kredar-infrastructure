@@ -98,6 +98,7 @@ services:
       NombaSettings__WebhookSignatureHeader: ${NOMBA_WEBHOOK_SIGNATURE_HEADER:-nomba-signature}
       NombaSettings__TimestampHeader: ${NOMBA_TIMESTAMP_HEADER:-nomba-timestamp}
       NombaSettings__TokenRefreshSeconds: ${NOMBA_TOKEN_REFRESH_SECONDS:-3300}
+      NombaSettings__SimulateTransfers: "false"
       # Transactional email via Resend (same as Xental). API key is a secret.
       Resend__ApiKey: ${RESEND_API_KEY:-}
       Resend__FromEmail: ${RESEND_FROM_EMAIL:-}
@@ -168,7 +169,7 @@ services:
       ASPNETCORE_ENVIRONMENT: ${AJOVAULT_ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_HTTP_PORTS: "8080"
       ConnectionStrings__DefaultConnection: "Host=ajovault-postgres;Port=5432;Database=${AJOVAULT_POSTGRES_DB:-ajovault};Username=${AJOVAULT_POSTGRES_USER:-ajovault_app};Password=${AJOVAULT_POSTGRES_PASSWORD}"
-      AppSettings__BaseUrl: "https://${AJOVAULT_API_HOST}"
+      AppSettings__BaseUrl: "https://${AJOVAULT_FRONTEND_HOST}"
       Cors__AllowedOrigins: "https://${AJOVAULT_FRONTEND_HOST}"
       JwtSettings__Secret: ${AJOVAULT_JWT_SIGNING_KEY:?set AJOVAULT_JWT_SIGNING_KEY as a GitHub secret}
       JwtSettings__Issuer: ${AJOVAULT_JWT_ISSUER:-ajovault-api}
