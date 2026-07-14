@@ -16,6 +16,8 @@ SLEEP="${HEALTHCHECK_SLEEP:-3}"
 SERVICES=(
   "kredar-api:8080"
   "kredar-frontend:3000"
+  "ajovault-api:8080"
+  "ajovault-frontend:3000"
 )
 
 check_one() {
