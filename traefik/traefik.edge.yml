@@ -1,0 +1,44 @@
+# Traefik static config for the SHARED edge proxy (EDGE_MODE=shared single-box
+# topology). Identical to traefik.yml except the Docker provider default network
+# is `edge` — the external network every co-located product/environment stack
+# attaches to. One edge Traefik terminates TLS for every hostname on the box;
+# routers/services are discovered from each container's labels (unique per env
+# via the ${COMPOSE_NAME_SUFFIX} the deploy applies).
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    # Only containers that opt in with `traefik.enable=true` are exposed.
+    exposedByDefault: false
+    # Reach backends over the shared external network.
+    network: edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # Email injected via TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL.
+      storage: /acme/acme.json
+      tlsChallenge: {}
+
+log:
+  level: INFO
+
+accessLog: {}

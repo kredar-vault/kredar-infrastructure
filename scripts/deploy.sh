@@ -32,12 +32,35 @@ DEPLOYED="env/${ENV_NAME}.runtime.env.deployed"
 
 [[ -f "$INCOMING" ]] || { echo "ERROR: $INCOMING not present (was it shipped?)" >&2; exit 1; }
 
+# --- Shared-Traefik single-box mode (opt-in via EDGE_MODE=shared) -----------
+# When set, this environment is co-located with other products/environments
+# behind ONE shared edge Traefik. We run the stack as its own project
+# (kredar-<env>), env-scope every container/network/router name via
+# COMPOSE_NAME_SUFFIX, point the routing labels at the external `edge` network,
+# and bring that shared edge Traefik up (idempotently). When EDGE_MODE is unset,
+# none of this applies and the deploy behaves exactly as before.
+SHARED_OVERLAY=()
+PROJECT_ARGS=()
+if grep -qE '^EDGE_MODE=shared' "$INCOMING"; then
+  echo "==> EDGE_MODE=shared: co-locating ${ENV_NAME} behind the shared edge Traefik."
+  export COMPOSE_NAME_SUFFIX="-${ENV_NAME}"
+  export ENVIRONMENT="${ENV_NAME}"
+  export TRAEFIK_DOCKER_NETWORK="edge"
+  export HEALTHCHECK_NETWORK="kredar-${ENV_NAME}-internal"
+  SHARED_OVERLAY=(-f compose/docker-compose.shared.yml)
+  PROJECT_ARGS=(-p "kredar-${ENV_NAME}")
+  docker network inspect edge >/dev/null 2>&1 || docker network create edge
+  docker compose --project-directory "$REPO_DIR" -p edge \
+    -f compose/docker-compose.edge.yml --env-file "$INCOMING" up -d
+fi
+
 deploy_with() {
   local ef="$1"
   # --project-directory pins relative bind-mount paths (./traefik) to the repo
   # root rather than the compose/ subdir where the files live.
-  docker compose --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" --env-file "$ef" pull
-  docker compose --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" --env-file "$ef" up -d --remove-orphans --force-recreate
+  # PROJECT_ARGS/SHARED_OVERLAY are empty unless EDGE_MODE=shared.
+  docker compose "${PROJECT_ARGS[@]}" --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" "${SHARED_OVERLAY[@]}" --env-file "$ef" pull
+  docker compose "${PROJECT_ARGS[@]}" --project-directory "$REPO_DIR" -f "$BASE" -f "$OVERRIDE" "${SHARED_OVERLAY[@]}" --env-file "$ef" up -d --remove-orphans --force-recreate
 }
 
 ghcr_login_from() {

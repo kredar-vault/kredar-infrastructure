@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+# Contabo API creds: Contabo control panel -> "API" (OAuth2 client + API user/password).
+contabo_client_id     = "..."
+contabo_client_secret = "..."
+contabo_api_user      = "you@example.com"
+contabo_api_password  = "..."
+
+# Ubuntu 24.04 image id (look up in the control panel or via the Contabo API).
+image_id = "afecbb85-e2fc-46f0-9684-b46b1faf00bb"
+
+# One shared box for everything (default). For one box per env use ["staging","production"].
+hosts      = ["shared"]
+product_id = "V45" # smallest "Cloud VPS 10" tier; confirm current id in the panel, size up if RAM-tight
+region     = "EU"
+
+# Public key contents (e.g. ~/.ssh/kredar_deploy.pub). Private key -> SSH_PRIVATE_KEY GitHub secret.
+ssh_public_key = "ssh-ed25519 AAAA... you@example.com"
