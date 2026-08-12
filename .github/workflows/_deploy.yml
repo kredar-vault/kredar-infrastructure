@@ -56,6 +56,10 @@ jobs:
 
       - name: Render runtime env from GitHub secrets
         env:
+          # Non-secret toggle: set the GitHub Environment variable EDGE_MODE=shared
+          # to co-locate this environment behind the single shared edge Traefik
+          # (cost-consolidated single-box topology). Unset = one Traefik per box.
+          EDGE_MODE:              ${{ vars.EDGE_MODE }}
           POSTGRES_PASSWORD:      ${{ secrets.POSTGRES_PASSWORD }}
           GHCR_USER:              ${{ secrets.GHCR_USER }}
           GHCR_TOKEN:             ${{ secrets.GHCR_TOKEN }}

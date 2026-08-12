@@ -1,0 +1,32 @@
+# Overlay applied ONLY in the shared-Traefik single-box topology (EDGE_MODE=shared).
+# The deploy adds this with `-f` and runs the stack as project `kredar-<env>`, so
+# every container/network/volume/router name is env-scoped (via COMPOSE_NAME_SUFFIX
+# and the project prefix) and multiple products/environments can share one box.
+#
+# What it changes vs. the base:
+#   - the in-stack Traefik is parked under a profile that the shared deploy never
+#     enables, so only the single external `edge` Traefik binds :80/:443;
+#   - each routed app service also joins the external `edge` network so that shared
+#     Traefik can reach it (its router label points at `edge` via TRAEFIK_DOCKER_NETWORK).
+# Everything else (per-env Postgres on the env-scoped `internal` network) stays
+# isolated per environment.
+
+networks:
+  edge:
+    external: true
+    name: edge
+
+services:
+  traefik:
+    # Never started in shared mode (the shared edge proxy replaces it). The base
+    # deploy has no profile, so this only affects shared-mode invocations.
+    profiles: ["own-traefik"]
+
+  kredar-api:
+    networks: [internal, edge]
+  kredar-frontend:
+    networks: [internal, edge]
+  ajovault-api:
+    networks: [internal, edge]
+  ajovault-frontend:
+    networks: [internal, edge]

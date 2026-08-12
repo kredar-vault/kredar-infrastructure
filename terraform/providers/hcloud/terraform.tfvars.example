@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+hcloud_token = "..." # Hetzner Cloud project API token (read+write)
+
+hosts       = ["shared"]     # one box for everything; or ["staging","production"]
+server_type = "cx22"         # smallest x86 (2 vCPU / 4 GB); size up if RAM-tight
+location    = "nbg1"
+
+ssh_public_key = "ssh-ed25519 AAAA... you@example.com"

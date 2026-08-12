@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+gcp_project = "my-gcp-project"
+gcp_region  = "europe-west1"
+gcp_zone    = "europe-west1-b"
+
+# Either paste the service-account JSON here, or leave empty and use
+# `gcloud auth application-default login` on the machine running Terraform.
+# gcp_credentials = file("sa-key.json")
+
+hosts        = ["shared"]        # one box for everything; or ["staging","production"]
+machine_type = "e2-standard-2"
+
+ssh_public_key = "ssh-ed25519 AAAA... you@example.com"

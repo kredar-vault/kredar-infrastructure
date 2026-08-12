@@ -13,11 +13,14 @@
 
 name: kredar
 
+# COMPOSE_NAME_SUFFIX is empty by default (single-product-per-box, e.g. AWS), so
+# every name below renders exactly as before. In the shared single-box topology
+# the deploy sets it to "-<env>" so co-located environments never collide.
 networks:
   edge:        # public-facing; only Traefik is attached + published
-    name: kredar-edge
+    name: kredar${COMPOSE_NAME_SUFFIX:-}-edge
   internal:    # private app/db network, never published to the host
-    name: kredar-internal
+    name: kredar${COMPOSE_NAME_SUFFIX:-}-internal
 
 volumes:
   traefik-acme:      # Let's Encrypt certificate store
@@ -28,7 +31,7 @@ services:
   # ---- Reverse proxy / TLS termination --------------------------------
   traefik:
     image: ${TRAEFIK_IMAGE:-traefik:v3.6}
-    container_name: kredar-traefik
+    container_name: kredar-traefik${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [edge, internal]
     ports:
@@ -49,7 +52,7 @@ services:
   # ---- Database -------------------------------------------------------
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
-    container_name: kredar-postgres
+    container_name: kredar-postgres${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     environment:
@@ -68,7 +71,7 @@ services:
   # ---- Application: Kredar API (image built by kredar-backend) ---------
   kredar-api:
     image: ${KREDAR_API_IMAGE:?set KREDAR_API_IMAGE in versions/<env>.env}
-    container_name: kredar-api
+    container_name: kredar-api${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     depends_on:
@@ -107,19 +110,19 @@ services:
       AdminSettings__BootstrapSecret: ${ADMIN_BOOTSTRAP_SECRET:-}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=kredar-internal"
-      - "traefik.http.routers.kredar-api.rule=Host(`${KREDAR_API_HOST}`)"
-      - "traefik.http.routers.kredar-api.entrypoints=websecure"
-      - "traefik.http.routers.kredar-api.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.kredar-api.middlewares=api-chain@file"
-      - "traefik.http.services.kredar-api.loadbalancer.server.port=8080"
-      - "traefik.http.services.kredar-api.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.kredar-api.loadbalancer.healthcheck.interval=15s"
+      - "traefik.docker.network=${TRAEFIK_DOCKER_NETWORK:-kredar-internal}"
+      - "traefik.http.routers.kredar-api${COMPOSE_NAME_SUFFIX:-}.rule=Host(`${KREDAR_API_HOST}`)"
+      - "traefik.http.routers.kredar-api${COMPOSE_NAME_SUFFIX:-}.entrypoints=websecure"
+      - "traefik.http.routers.kredar-api${COMPOSE_NAME_SUFFIX:-}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kredar-api${COMPOSE_NAME_SUFFIX:-}.middlewares=api-chain@file"
+      - "traefik.http.services.kredar-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.server.port=8080"
+      - "traefik.http.services.kredar-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.kredar-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.interval=15s"
 
   # ---- Frontend (Next.js) — served at the root/app domain --------------
   kredar-frontend:
     image: ${KREDAR_FRONTEND_IMAGE:?set KREDAR_FRONTEND_IMAGE in versions/<env>.env}
-    container_name: kredar-frontend
+    container_name: kredar-frontend${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     environment:
@@ -129,18 +132,18 @@ services:
       API_URL: "https://${KREDAR_API_HOST}"
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=kredar-internal"
-      - "traefik.http.routers.kredar-frontend.rule=Host(`${KREDAR_FRONTEND_HOST}`)"
-      - "traefik.http.routers.kredar-frontend.entrypoints=websecure"
-      - "traefik.http.routers.kredar-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.kredar-frontend.loadbalancer.server.port=3000"
-      - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.kredar-frontend.loadbalancer.healthcheck.interval=15s"
+      - "traefik.docker.network=${TRAEFIK_DOCKER_NETWORK:-kredar-internal}"
+      - "traefik.http.routers.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.rule=Host(`${KREDAR_FRONTEND_HOST}`)"
+      - "traefik.http.routers.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.entrypoints=websecure"
+      - "traefik.http.routers.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.server.port=3000"
+      - "traefik.http.services.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.kredar-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.interval=15s"
 
   # ---- AjoVault database (dedicated instance) -------------------------
   ajovault-postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
-    container_name: ajovault-postgres
+    container_name: ajovault-postgres${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     environment:
@@ -159,7 +162,7 @@ services:
   # ---- AjoVault API (image built by ajovault-backend) -----------------
   ajovault-api:
     image: ${AJOVAULT_API_IMAGE:?set AJOVAULT_API_IMAGE in versions/<env>.env}
-    container_name: ajovault-api
+    container_name: ajovault-api${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     depends_on:
@@ -183,19 +186,19 @@ services:
       KredarSettings__WebhookSecret: ${AJOVAULT_KREDAR_WEBHOOK_SECRET:-}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=kredar-internal"
-      - "traefik.http.routers.ajovault-api.rule=Host(`${AJOVAULT_API_HOST}`)"
-      - "traefik.http.routers.ajovault-api.entrypoints=websecure"
-      - "traefik.http.routers.ajovault-api.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ajovault-api.middlewares=api-chain@file"
-      - "traefik.http.services.ajovault-api.loadbalancer.server.port=8080"
-      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.ajovault-api.loadbalancer.healthcheck.interval=15s"
+      - "traefik.docker.network=${TRAEFIK_DOCKER_NETWORK:-kredar-internal}"
+      - "traefik.http.routers.ajovault-api${COMPOSE_NAME_SUFFIX:-}.rule=Host(`${AJOVAULT_API_HOST}`)"
+      - "traefik.http.routers.ajovault-api${COMPOSE_NAME_SUFFIX:-}.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-api${COMPOSE_NAME_SUFFIX:-}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ajovault-api${COMPOSE_NAME_SUFFIX:-}.middlewares=api-chain@file"
+      - "traefik.http.services.ajovault-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.server.port=8080"
+      - "traefik.http.services.ajovault-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-api${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.interval=15s"
 
   # ---- AjoVault frontend (Next.js) ------------------------------------
   ajovault-frontend:
     image: ${AJOVAULT_FRONTEND_IMAGE:?set AJOVAULT_FRONTEND_IMAGE in versions/<env>.env}
-    container_name: ajovault-frontend
+    container_name: ajovault-frontend${COMPOSE_NAME_SUFFIX:-}
     restart: unless-stopped
     networks: [internal]
     environment:
@@ -203,10 +206,10 @@ services:
       NEXT_PUBLIC_API_BASE_URL: "https://${AJOVAULT_API_HOST}"
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=kredar-internal"
-      - "traefik.http.routers.ajovault-frontend.rule=Host(`${AJOVAULT_FRONTEND_HOST}`)"
-      - "traefik.http.routers.ajovault-frontend.entrypoints=websecure"
-      - "traefik.http.routers.ajovault-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ajovault-frontend.loadbalancer.server.port=3000"
-      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.ajovault-frontend.loadbalancer.healthcheck.interval=15s"
+      - "traefik.docker.network=${TRAEFIK_DOCKER_NETWORK:-kredar-internal}"
+      - "traefik.http.routers.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.rule=Host(`${AJOVAULT_FRONTEND_HOST}`)"
+      - "traefik.http.routers.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.entrypoints=websecure"
+      - "traefik.http.routers.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.server.port=3000"
+      - "traefik.http.services.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.ajovault-frontend${COMPOSE_NAME_SUFFIX:-}.loadbalancer.healthcheck.interval=15s"

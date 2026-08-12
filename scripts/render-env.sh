@@ -64,6 +64,14 @@ umask 077
   keep_kv "$envfile"
   keep_kv "$versions"
 
+  # Optional non-secret config injected by the deploy workflow from GitHub
+  # Environment variables (not committed to the env layers above). EDGE_MODE=shared
+  # opts this environment into the shared single-box Traefik topology; unset =
+  # the classic one-Traefik-per-box behaviour.
+  for v in EDGE_MODE; do
+    [[ -n "${!v:-}" ]] && printf '%s=%s\n' "$v" "${!v}" || true
+  done
+
   if [[ "${SKIP_SECRETS:-0}" != "1" ]]; then
     for v in "${REQUIRED_SECRETS[@]}"; do
       if [[ -z "${!v:-}" ]]; then

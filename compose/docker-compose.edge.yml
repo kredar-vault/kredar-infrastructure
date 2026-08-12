@@ -1,0 +1,40 @@
+# SHARED edge proxy — one Traefik in front of every co-located product and
+# environment on a single box (the cost-consolidated EDGE_MODE=shared topology).
+#
+# Run as its OWN compose project so it is independent of any product stack:
+#   docker compose -p edge -f compose/docker-compose.edge.yml --env-file <env> up -d
+# It is idempotent: the first product/env to deploy brings it up; the rest are
+# no-ops. Each product stack (in shared mode) attaches its app services to the
+# external `edge` network and this Traefik discovers them by label.
+#
+# This file is IDENTICAL in xental-infrastructure and kredar-infrastructure so
+# whichever repo deploys first owns the edge proxy; the other is a no-op.
+
+name: edge
+
+networks:
+  edge:
+    external: true   # created by the host bootstrap (`docker network create edge`)
+    name: edge
+
+volumes:
+  edge-acme:         # Let's Encrypt store for ALL hostnames on the box
+
+services:
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3.6}
+    container_name: edge-traefik
+    restart: unless-stopped
+    networks: [edge]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.edge.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/${TRAEFIK_DYNAMIC_DIR:-dynamic}:/etc/traefik/dynamic:ro
+      - edge-acme:/acme
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL}
+    labels:
+      - "traefik.enable=false"
